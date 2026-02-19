@@ -1,3 +1,4 @@
 const std = @import("std");
-const world = @import("engine/ecs/world.zig");
-const scheduler = @import("engine/ecs/scheduler.zig");
+pub const world = @import("engine/ecs/world.zig");
+pub const scheduler = @import("engine/ecs/scheduler.zig");
+pub const query = @import("engine/ecs/query.zig");
