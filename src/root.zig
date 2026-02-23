@@ -1,4 +1,13 @@
 const std = @import("std");
-pub const world = @import("engine/ecs/world.zig");
-pub const scheduler = @import("engine/ecs/scheduler.zig");
-pub const query = @import("engine/ecs/query.zig");
+pub const ecs = @import("engine/ecs/ecs.zig");
+
+pub const RootPlugin = ecs.Plugin(.{
+    .systems = .{},
+    .statemachine = .{},
+    .plugins = .{},
+});
+
+comptime {
+    // this is needed to make it so that the tests in other files are visible to the test runner
+    std.testing.refAllDecls(@This());
+}

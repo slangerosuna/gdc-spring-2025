@@ -1,0 +1,5 @@
+.{
+    .max_components = 256,
+    .max_systems = 256,
+    .max_statemachine = 256,
+}
