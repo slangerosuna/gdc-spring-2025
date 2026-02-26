@@ -1,6 +1,8 @@
 const std = @import("std");
 pub const ecs = @import("engine/ecs/ecs.zig");
 pub const math = @import("engine/math.zig");
+pub const geometry = @import("engine/geometry/mod.zig");
+pub const material = @import("engine/material/mod.zig");
 pub const sdl = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
