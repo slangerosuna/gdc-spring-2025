@@ -13,3 +13,9 @@ pub const createPhongMaterial = @import("phong.zig").createPhongMaterial;
 pub const PhongMaterialArgs = @import("phong.zig").PhongMaterialArgs;
 pub const phong_material_vert_spv = @import("phong.zig").phong_material_vert_spv;
 pub const phong_material_frag_spv = @import("phong.zig").phong_material_frag_spv;
+
+pub const createPBRMaterial = @import("pbr.zig").createPBRMaterial;
+pub const createPBRMaterialWithTextures = @import("pbr.zig").createPBRMaterialWithTextures;
+pub const PBRMaterialArgs = @import("pbr.zig").PBRMaterialArgs;
+pub const pbr_vert_spv = @import("pbr.zig").pbr_vert_spv;
+pub const pbr_frag_spv = @import("pbr.zig").pbr_frag_spv;
