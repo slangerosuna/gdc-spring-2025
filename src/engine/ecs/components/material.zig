@@ -1,6 +1,6 @@
 const sdl = @import("sdl");
 
-pub const MaterialComponent = struct {
+pub const Material = struct {
     color: sdl.SDL_FColor,
     emissive: sdl.SDL_FColor,
     texture: *sdl.SDL_GPUTexture,
