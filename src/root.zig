@@ -3,6 +3,12 @@ pub const ecs = @import("engine/ecs/ecs.zig");
 pub const math = @import("engine/math.zig");
 pub const geometry = @import("engine/geometry/mod.zig");
 pub const material = @import("engine/material/mod.zig");
+pub const TimeSystem = @import("engine/systems/time.zig").TimeSystem;
+pub const Time = @import("engine/systems/time.zig").Time;
+pub const InputSystem = @import("engine/systems/input.zig").InputSystem;
+pub const Input = @import("engine/systems/input.zig").Input;
+pub const RenderSystem = @import("engine/systems/render.zig").RenderSystem;
+pub const RenderTarget = @import("engine/systems/render.zig").RenderTarget;
 pub const sdl = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");

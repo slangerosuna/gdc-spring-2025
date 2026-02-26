@@ -1,0 +1,327 @@
+const std = @import("std");
+const root = @import("../../root.zig");
+const sdl = root.sdl;
+const math = root.math;
+const ecs = root.ecs;
+const geometry = root.geometry;
+const material = root.material;
+
+const Entity = ecs.Entity;
+const Transform = @import("../ecs/components/transform.zig").Transform;
+const Camera = @import("../ecs/components/camera.zig").Camera;
+const Mesh = @import("../ecs/components/mesh.zig").Mesh;
+const MaterialComp = @import("../ecs/components/material.zig").Material;
+const pointlight = @import("../ecs/components/pointlight.zig");
+const ambientlight = @import("../ecs/components/ambientlight.zig");
+
+pub const RenderTarget = union(enum) {
+    swapchain: *sdl.SDL_Window,
+    texture: struct {
+        texture: *sdl.SDL_GPUTexture,
+        width: u32,
+        height: u32,
+    },
+};
+
+pub const RenderSystem = struct {
+    pub const stage = ecs.SystemStage.Render;
+
+    pub const Res = struct {
+        device: *sdl.SDL_GPUDevice,
+        camera_entity: Entity,
+        target: RenderTarget,
+    };
+
+    var depth_texture: ?*sdl.SDL_GPUTexture = null;
+    var point_ssbo: ?*sdl.SDL_GPUBuffer = null;
+    var ambient_ssbo: ?*sdl.SDL_GPUBuffer = null;
+    var point_size: u32 = 0;
+    var ambient_size: u32 = 0;
+    var cached_width: u32 = 0;
+    var cached_height: u32 = 0;
+    var point_dirty: bool = true;
+    var ambient_dirty: bool = true;
+
+    pub fn deinit(device: *sdl.SDL_GPUDevice) void {
+        if (depth_texture) |tex| {
+            sdl.SDL_ReleaseGPUTexture(device, tex);
+            depth_texture = null;
+        }
+        if (point_ssbo) |buf| {
+            sdl.SDL_ReleaseGPUBuffer(device, buf);
+            point_ssbo = null;
+        }
+        if (ambient_ssbo) |buf| {
+            sdl.SDL_ReleaseGPUBuffer(device, buf);
+            ambient_ssbo = null;
+        }
+    }
+
+    pub fn getPointLightContext() pointlight.Context {
+        return .{
+            .device = undefined,
+            .ssbo = &point_ssbo,
+            .ssbo_size = &point_size,
+            .dirty = &point_dirty,
+        };
+    }
+
+    pub fn getAmbientLightContext() ambientlight.Context {
+        return .{
+            .device = undefined,
+            .ssbo = &ambient_ssbo,
+            .ssbo_size = &ambient_size,
+            .dirty = &ambient_dirty,
+        };
+    }
+
+    pub fn getPointLightContextWithDevice(device: *sdl.SDL_GPUDevice) pointlight.Context {
+        return .{
+            .device = device,
+            .ssbo = &point_ssbo,
+            .ssbo_size = &point_size,
+            .dirty = &point_dirty,
+        };
+    }
+
+    pub fn getAmbientLightContextWithDevice(device: *sdl.SDL_GPUDevice) ambientlight.Context {
+        return .{
+            .device = device,
+            .ssbo = &ambient_ssbo,
+            .ssbo_size = &ambient_size,
+            .dirty = &ambient_dirty,
+        };
+    }
+
+    pub fn run(res: Res, world: anytype) void {
+        ensureSSBOs(res.device);
+
+        if (point_dirty and point_ssbo != null) {
+            var ctx = getPointLightContextWithDevice(res.device);
+            pointlight.PointLight.rebuildSSBO(world, &ctx);
+        }
+        if (ambient_dirty and ambient_ssbo != null) {
+            var ctx = getAmbientLightContextWithDevice(res.device);
+            ambientlight.AmbientLight.rebuildSSBO(world, &ctx);
+        }
+
+        const cam_trans = world.getConst("transform", res.camera_entity) orelse return;
+        const cam_comp = world.getConst("camera", res.camera_entity) orelse return;
+
+        const cmd = sdl.SDL_AcquireGPUCommandBuffer(res.device);
+
+        var color_texture: ?*sdl.SDL_GPUTexture = null;
+        var width: u32 = 0;
+        var height: u32 = 0;
+
+        switch (res.target) {
+            .swapchain => |window| {
+                if (!sdl.SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, &color_texture, &width, &height)) {
+                    _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
+                    return;
+                }
+            },
+            .texture => |target| {
+                color_texture = target.texture;
+                width = target.width;
+                height = target.height;
+            },
+        }
+
+        if (color_texture == null) {
+            _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
+            return;
+        }
+
+        const w: u32 = width;
+        const h: u32 = height;
+
+        ensureDepthTexture(res.device, w, h);
+        ensureSSBOs(res.device);
+        if (depth_texture == null) {
+            _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
+            return;
+        }
+
+        var color_target = sdl.SDL_GPUColorTargetInfo{
+            .texture = color_texture.?,
+            .clear_color = .{ .r = 0.05, .g = 0.05, .b = 0.08, .a = 1 },
+            .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+            .store_op = sdl.SDL_GPU_STOREOP_STORE,
+        };
+
+        var depth_target = sdl.SDL_GPUDepthStencilTargetInfo{
+            .texture = depth_texture.?,
+            .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+            .store_op = sdl.SDL_GPU_STOREOP_STORE,
+            .cycle = false,
+            .clear_depth = 1.0,
+            .clear_stencil = 0,
+        };
+
+        const pass = sdl.SDL_BeginGPURenderPass(cmd, &color_target, 1, &depth_target);
+        defer sdl.SDL_EndGPURenderPass(pass);
+
+        const viewport = sdl.SDL_GPUViewport{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(width),
+            .h = @floatFromInt(height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+        sdl.SDL_SetGPUViewport(pass, &viewport);
+
+        var view: math.Mat4 = undefined;
+        math.mat4Identity(&view);
+        const conj_rot = math.quatConjugate(cam_trans.rotation);
+        math.mat4RotateQuat(&view, conj_rot);
+        math.mat4Translate(&view, math.vec3Scale(cam_trans.position, -1));
+
+        var proj: math.Mat4 = undefined;
+        const aspect: f32 = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
+        math.mat4Perspective(&proj, cam_comp.fov * std.math.pi / 180.0, aspect, cam_comp.near_clip, cam_comp.far_clip);
+
+        const VertexUBO = extern struct {
+            view: [16]f32,
+            proj: [16]f32,
+        };
+        var vertex_ubo: VertexUBO = undefined;
+        @memcpy(vertex_ubo.view[0..], view[0..]);
+        @memcpy(vertex_ubo.proj[0..], proj[0..]);
+        sdl.SDL_PushGPUVertexUniformData(cmd, 0, &vertex_ubo, @sizeOf(VertexUBO));
+
+        const FragmentUBO = extern struct {
+            cam_pos: [4]f32,
+            cam_rot: [4]f32,
+            ambient_count: u32,
+            point_count: u32,
+            pad0: u32,
+            pad1: u32,
+        };
+        const ambient_count = countComponents(world, "ambient_light");
+        const point_count = countComponents(world, "point_light");
+        const fragment_ubo = FragmentUBO{
+            .cam_pos = .{ cam_trans.position[0], cam_trans.position[1], cam_trans.position[2], 0 },
+            .cam_rot = .{ cam_trans.rotation[0], cam_trans.rotation[1], cam_trans.rotation[2], cam_trans.rotation[3] },
+            .ambient_count = ambient_count,
+            .point_count = point_count,
+            .pad0 = 0,
+            .pad1 = 0,
+        };
+        sdl.SDL_PushGPUFragmentUniformData(cmd, 0, &fragment_ubo, @sizeOf(FragmentUBO));
+
+        var mesh_iter = world.iter("mesh");
+        while (mesh_iter.next()) |entry| {
+            const entity = entry.entity;
+            const mesh_comp = world.getConst("mesh", entity) orelse continue;
+            const mat = world.getConst("material", entity) orelse continue;
+            const trans = world.getConst("transform", entity) orelse continue;
+
+            var model: math.Mat4 = undefined;
+            math.mat4Identity(&model);
+            if (world.has("billboard", entity)) {
+                math.mat4Translate(&model, trans.position);
+                math.mat4RotateQuat(&model, cam_trans.rotation);
+                math.mat4RotateY(&model, std.math.pi);
+                math.mat4Scale(&model, trans.scale);
+            } else {
+                math.mat4Translate(&model, trans.position);
+                math.mat4RotateQuat(&model, trans.rotation);
+                math.mat4Scale(&model, trans.scale);
+            }
+
+            const ObjectUBO = extern struct {
+                model: [16]f32,
+                color: [4]f32,
+            };
+            var object_ubo: ObjectUBO = undefined;
+            @memcpy(object_ubo.model[0..], model[0..]);
+            object_ubo.color = .{ mat.color.r, mat.color.g, mat.color.b, mat.color.a };
+            sdl.SDL_PushGPUVertexUniformData(cmd, 1, &object_ubo, @sizeOf(ObjectUBO));
+
+            sdl.SDL_BindGPUGraphicsPipeline(pass, mat.pipeline);
+
+            const vbo_binding = sdl.SDL_GPUBufferBinding{
+                .buffer = mesh_comp.vertex_buffer.?,
+                .offset = 0,
+            };
+            sdl.SDL_BindGPUVertexBuffers(pass, 0, &vbo_binding, 1);
+
+            const tex_bind = sdl.SDL_GPUTextureSamplerBinding{
+                .texture = mat.texture,
+                .sampler = mat.sampler,
+            };
+            sdl.SDL_BindGPUFragmentSamplers(pass, 0, &tex_bind, 1);
+
+            const buffers = [_]?*sdl.SDL_GPUBuffer{ ambient_ssbo, point_ssbo };
+            sdl.SDL_BindGPUFragmentStorageBuffers(pass, 0, &buffers, 2);
+
+            if (mesh_comp.index_buffer) |ib| {
+                const ibo_binding = sdl.SDL_GPUBufferBinding{
+                    .buffer = ib,
+                    .offset = 0,
+                };
+                sdl.SDL_BindGPUIndexBuffer(pass, &ibo_binding, mesh_comp.index_size);
+                sdl.SDL_DrawGPUIndexedPrimitives(pass, mesh_comp.num_indices, 1, 0, 0, 0);
+            } else {
+                sdl.SDL_DrawGPUPrimitives(pass, mesh_comp.num_vertices, 1, 0, 0);
+            }
+        }
+
+        _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
+    }
+
+    fn ensureDepthTexture(device: *sdl.SDL_GPUDevice, width: u32, height: u32) void {
+        if (depth_texture != null and cached_width == width and cached_height == height) {
+            return;
+        }
+
+        if (depth_texture) |tex| {
+            sdl.SDL_ReleaseGPUTexture(device, tex);
+        }
+
+        const depth_info = sdl.SDL_GPUTextureCreateInfo{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .format = sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+            .width = width,
+            .height = height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
+            .props = 0,
+        };
+        depth_texture = sdl.SDL_CreateGPUTexture(device, &depth_info);
+        cached_width = width;
+        cached_height = height;
+    }
+
+    fn ensureSSBOs(device: *sdl.SDL_GPUDevice) void {
+        if (point_ssbo != null and ambient_ssbo != null) return;
+
+        const ssbo_info = sdl.SDL_GPUBufferCreateInfo{
+            .usage = sdl.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+            .size = 1024,
+            .props = 0,
+        };
+
+        if (point_ssbo == null) {
+            point_ssbo = sdl.SDL_CreateGPUBuffer(device, &ssbo_info);
+            point_size = 1024;
+        }
+        if (ambient_ssbo == null) {
+            ambient_ssbo = sdl.SDL_CreateGPUBuffer(device, &ssbo_info);
+            ambient_size = 1024;
+        }
+    }
+
+    fn countComponents(world: anytype, comptime name: []const u8) u32 {
+        var iter = world.iter(name);
+        var count: u32 = 0;
+        while (iter.next()) |_| {
+            count += 1;
+        }
+        return count;
+    }
+};
