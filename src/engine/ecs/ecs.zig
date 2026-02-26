@@ -3,6 +3,15 @@ const std = @import("std");
 pub const query = @import("query.zig");
 pub const appbuilder = @import("appbuilder.zig");
 pub const config = @import("config.zon");
+pub const pool = @import("pool.zig");
+pub const world = @import("world.zig");
+pub const resource = @import("resource.zig");
+
+pub const Entity = pool.Entity;
+pub const invalid_entity = pool.invalid_entity;
+pub const Pool = pool.Pool;
+pub const World = world.World;
+pub const Resources = resource.Resources;
 
 const Type = std.builtin.Type;
 
