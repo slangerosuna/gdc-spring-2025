@@ -1,0 +1,19 @@
+pub const Vertex = @import("common.zig").Vertex;
+pub const uploadVertices = @import("common.zig").uploadVertices;
+pub const uploadIndices = @import("common.zig").uploadIndices;
+pub const computeNormals = @import("common.zig").computeNormals;
+
+pub const createBox = @import("box.zig").createBox;
+pub const createSphere = @import("sphere.zig").createSphere;
+pub const createPlane = @import("plane.zig").createPlane;
+pub const createCylinder = @import("cylinder.zig").createCylinder;
+pub const createCone = @import("cone.zig").createCone;
+pub const createCapsule = @import("capsule.zig").createCapsule;
+pub const createTorus = @import("torus.zig").createTorus;
+pub const createRing = @import("ring.zig").createRing;
+pub const createCircle = @import("circle.zig").createCircle;
+pub const createLathe = @import("lathe.zig").createLathe;
+pub const createTetrahedron = @import("tetrahedron.zig").createTetrahedron;
+pub const createOctahedron = @import("octahedron.zig").createOctahedron;
+pub const createIcosahedron = @import("icosahedron.zig").createIcosahedron;
+pub const createDodecahedron = @import("dodecahedron.zig").createDodecahedron;
