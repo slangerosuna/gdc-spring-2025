@@ -1,6 +1,36 @@
-# GDC Spring 2025
+<div align="center">
 
-Game for UC Merced Game Development Club Spring 2025. Game name TBD.
+# GDC S25
+
+UC Merced Game Developers Club Spring 2025 Project
+
+</div>
+
+## Overview
+
+### Goals
+
+TODO
+
+### Goals
+
+TODO
+
+## Quickstart
+
+### Development
+
+Clone the repository:
+
+```sh
+git clone https://github.com/slangerosuna/gdc-spring-2025
+```
+
+uuhhh something something zig
+
+```sh
+zig build test
+```
 
 ## Acknowledgements
 
