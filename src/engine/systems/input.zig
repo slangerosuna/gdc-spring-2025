@@ -36,43 +36,35 @@ pub const Input = struct {
     pub fn middlePressed(self: *const Input) bool {
         return self.mouseButtonPressed(sdl.SDL_BUTTON_MIDDLE);
     }
-};
 
-pub const InputSystem = struct {
-    input: Input,
-
-    pub const stage = ecs.SystemStage.PreUpdate;
-
-    pub fn init() InputSystem {
-        var self: InputSystem = .{
-            .input = .{},
-        };
-        self.input.keyboard_state = sdl.SDL_GetKeyboardState(&self.input.num_keys);
+    pub fn init() Input {
+        var self: Input = .{};
+        self.keyboard_state = sdl.SDL_GetKeyboardState(&self.num_keys);
         return self;
     }
 
-    pub fn run(self: *InputSystem) void {
-        self.input.mouse_xrel = 0;
-        self.input.mouse_yrel = 0;
-        self.input.mouse_wheel_x = 0;
-        self.input.mouse_wheel_y = 0;
-        self.input.quit_requested = false;
+    pub fn update(self: *Input) void {
+        self.mouse_xrel = 0;
+        self.mouse_yrel = 0;
+        self.mouse_wheel_x = 0;
+        self.mouse_wheel_y = 0;
+        self.quit_requested = false;
 
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event)) {
             switch (event.type) {
                 sdl.SDL_EVENT_QUIT => {
-                    self.input.quit_requested = true;
+                    self.quit_requested = true;
                 },
                 sdl.SDL_EVENT_MOUSE_MOTION => {
-                    self.input.mouse_x = event.motion.x;
-                    self.input.mouse_y = event.motion.y;
-                    self.input.mouse_xrel += event.motion.xrel;
-                    self.input.mouse_yrel += event.motion.yrel;
+                    self.mouse_x = event.motion.x;
+                    self.mouse_y = event.motion.y;
+                    self.mouse_xrel += event.motion.xrel;
+                    self.mouse_yrel += event.motion.yrel;
                 },
                 sdl.SDL_EVENT_MOUSE_WHEEL => {
-                    self.input.mouse_wheel_x += event.wheel.x;
-                    self.input.mouse_wheel_y += event.wheel.y;
+                    self.mouse_wheel_x += event.wheel.x;
+                    self.mouse_wheel_y += event.wheel.y;
                 },
                 else => {},
             }
@@ -80,22 +72,23 @@ pub const InputSystem = struct {
 
         var mx: f32 = undefined;
         var my: f32 = undefined;
-        self.input.mouse_buttons = sdl.SDL_GetMouseState(&mx, &my);
-        if (self.input.mouse_xrel == 0 and self.input.mouse_yrel == 0) {
-            self.input.mouse_x = mx;
-            self.input.mouse_y = my;
+        self.mouse_buttons = sdl.SDL_GetMouseState(&mx, &my);
+        if (self.mouse_xrel == 0 and self.mouse_yrel == 0) {
+            self.mouse_x = mx;
+            self.mouse_y = my;
         }
     }
+};
 
-    pub fn getInput(self: *const InputSystem) *const Input {
-        return &self.input;
-    }
+pub const InputSystem = struct {
+    pub const stage = ecs.SystemStage.PreUpdate;
 
-    pub fn getInputMut(self: *InputSystem) *Input {
-        return &self.input;
-    }
+    pub const Res = struct {
+        input: *Input,
+    };
 
-    pub fn quitRequested(self: *const InputSystem) bool {
-        return self.input.quit_requested;
+    pub fn run(res: Res, world: anytype) void {
+        _ = world;
+        res.input.update();
     }
 };

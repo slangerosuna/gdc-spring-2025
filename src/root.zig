@@ -20,12 +20,12 @@ pub const sdl = @cImport({
 });
 
 pub const RootPlugin = ecs.Plugin(.{
-    .systems = .{},
-    .statemachine = .{},
-    .plugins = .{},
+    .systems = .{
+        TimeSystem,
+        InputSystem,
+    },
 });
 
 comptime {
-    // this is needed to make it so that the tests in other files are visible to the test runner
     std.testing.refAllDecls(@This());
 }

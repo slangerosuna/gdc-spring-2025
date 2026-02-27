@@ -12,39 +12,35 @@ pub const Time = struct {
         const now_ns = sdl.SDL_GetTicksNS();
         return @as(f32, @floatFromInt(now_ns - self.start_ns)) / 1_000_000_000.0;
     }
-};
 
-pub const TimeSystem = struct {
-    time: Time,
-
-    pub const stage = ecs.SystemStage.PreUpdate;
-
-    pub fn init() TimeSystem {
+    pub fn init() Time {
         return .{
-            .time = Time{
-                .last_ns = sdl.SDL_GetTicksNS(),
-            },
+            .last_ns = sdl.SDL_GetTicksNS(),
         };
     }
 
-    pub fn run(self: *TimeSystem) void {
+    pub fn update(self: *Time) void {
         const now_ns = sdl.SDL_GetTicksNS();
-        const delta_ns = now_ns - self.time.last_ns;
-        self.time.dt = @as(f32, @floatFromInt(delta_ns)) / 1_000_000_000.0;
-        self.time.frame += 1;
-        self.time.last_ns = now_ns;
+        const delta_ns = now_ns - self.last_ns;
+        self.dt = @as(f32, @floatFromInt(delta_ns)) / 1_000_000_000.0;
+        self.frame += 1;
+        self.last_ns = now_ns;
     }
 
-    pub fn getTime(self: *const TimeSystem) *const Time {
-        return &self.time;
-    }
-
-    pub fn getTimeMut(self: *TimeSystem) *Time {
-        return &self.time;
-    }
-
-    pub fn total(self: *const TimeSystem) f32 {
-        _ = self;
+    pub fn total(_: *const Time) f32 {
         return @as(f32, @floatFromInt(sdl.SDL_GetTicksNS())) / 1_000_000_000.0;
+    }
+};
+
+pub const TimeSystem = struct {
+    pub const stage = ecs.SystemStage.PreUpdate;
+
+    pub const Res = struct {
+        time: *Time,
+    };
+
+    pub fn run(res: Res, world: anytype) void {
+        _ = world;
+        res.time.update();
     }
 };

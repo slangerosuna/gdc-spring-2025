@@ -6,87 +6,42 @@ pub const config = @import("config.zon");
 pub const pool = @import("pool.zig");
 pub const world = @import("world.zig");
 pub const resource = @import("resource.zig");
+pub const scheduler = @import("scheduler.zig");
 
 pub const Entity = pool.Entity;
 pub const invalid_entity = pool.invalid_entity;
 pub const Pool = pool.Pool;
 pub const World = world.World;
 pub const Resources = resource.Resources;
+pub const Scheduler = scheduler.Scheduler;
+pub const SystemStage = scheduler.SystemStage;
 
 const Type = std.builtin.Type;
-
-pub const SystemStage = enum(usize) {
-    Init,
-    DeInit,
-
-    PreUpdate,
-    Update,
-    PostUpdate,
-    Render,
-};
 
 pub const App = appbuilder.build(@import("../../root.zig").RootPlugin);
 pub const StateMachine = App.StateMachine;
 
 pub fn Plugin(comptime plugin: anytype) type {
-    var systems: [config.max_systems]type = undefined;
-    var cur_system = 0;
+    comptime var system_count: usize = 0;
 
-    var statemachines: [config.max_statemachine]type = undefined;
-    var cur_statemachine = 0;
-
-    for (@typeInfo(@TypeOf(plugin)).@"struct".fields) |field| {
-        if (std.mem.eql(u8, field.name, "systems")) {
-            // TODO:
-            systems[cur_system] = @TypeOf(@field(plugin, field.name));
-            cur_system += 1;
-            if (cur_system >= systems.len) {
-                @panic("too many systems");
-            }
-        } else if (std.mem.eql(u8, field.name, "statemachine")) {
-            // TODO:
-            statemachines[cur_statemachine] = @TypeOf(@field(plugin, field.name));
-            cur_statemachine += 1;
-            if (cur_statemachine >= statemachines.len) {
-                @panic("too many statemachines");
-            }
-        } else if (std.mem.eql(u8, field.name, "plugins")) {
-            // TODO:
-        } else {
-            @panic("expected .systems, .statemachine, or .plugins");
-        }
+    const systems_type = @TypeOf(@field(plugin, "systems"));
+    if (@typeInfo(systems_type) == .@"struct") {
+        system_count = @typeInfo(systems_type).@"struct".fields.len;
     }
 
-    return @Type(.{ .@"struct" = .{
-        .layout = .auto,
-        .fields = &[4]Type.StructField{ .{
-            .name = "systems",
-            .type = [cur_system]type,
-            .default_value_ptr = systems[0..cur_system],
-            .is_comptime = true,
-            .alignment = @alignOf([cur_system]type),
-        }, .{
-            .name = "system_count",
-            .type = comptime_int,
-            .default_value_ptr = &cur_system,
-            .is_comptime = true,
-            .alignment = @alignOf(comptime_int),
-        }, .{
-            .name = "statemachines",
-            .type = [cur_statemachine]type,
-            .default_value_ptr = statemachines[0..cur_statemachine],
-            .is_comptime = true,
-            .alignment = @alignOf([cur_statemachine]type),
-        }, .{
-            .name = "statemachine_count",
-            .type = comptime_int,
-            .default_value_ptr = &cur_statemachine,
-            .is_comptime = true,
-            .alignment = @alignOf(comptime_int),
-        } },
-        .decls = &[0]Type.Declaration{},
-        .is_tuple = false,
-    } });
+    comptime var systems: [system_count]type = undefined;
+    comptime var sys_idx: usize = 0;
+
+    const systems_value = @field(plugin, "systems");
+    inline for (@typeInfo(systems_type).@"struct".fields) |sys_field| {
+        systems[sys_idx] = @field(systems_value, sys_field.name);
+        sys_idx += 1;
+    }
+
+    return struct {
+        pub const Systems = systems;
+        pub const system_count_val = system_count;
+    };
 }
 
 comptime {
